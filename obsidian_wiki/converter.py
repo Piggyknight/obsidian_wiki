@@ -32,18 +32,23 @@ def get_pdf_page_count(path: Path) -> int:
         return doc.page_count
 
 
-def convert_document(src: Path, vault_dir: Path, config: dict) -> ConvertResult:
-    """Convert a document and integrate it into the Obsidian vault.
+def convert_document(src: Path, vault_layout, config: dict) -> ConvertResult:
+    """Convert a single document into the Obsidian vault.
+
+    Args:
+        src: Path to the source file.
+        vault_layout: VaultLayout instance for resolving vault paths.
+        config: Full config dict.
 
     Steps:
     1. Hash-check — skip if already known.
-    2. Copy source to ``raw/`` (optional, mirrors OpenKB layout).
+    2. Copy source to ``raw/``.
     3. If PDF and page count >= threshold → mark as long doc (defer to indexer).
     4. If ``.md`` — read, process relative images, save to ``sources/``.
     5. Otherwise — run MarkItDown, extract base64 images, save to ``sources/``.
-    6. Register hash in the registry.
+    6. Register hash in the registry (after successful compilation — done by caller).
     """
-    state_dir = vault_dir / ".obsidian_wiki"
+    state_dir = vault_layout.vault_root / ".obsidian_wiki"
     state_dir.mkdir(parents=True, exist_ok=True)
     threshold: int = config.get("pageindex_threshold", 20)
     registry = HashRegistry(state_dir / "hashes.json")
@@ -55,7 +60,7 @@ def convert_document(src: Path, vault_dir: Path, config: dict) -> ConvertResult:
         return ConvertResult(skipped=True)
 
     # 2. Copy to raw/
-    raw_dir = vault_dir / "raw"
+    raw_dir = vault_layout.raw_dir()
     raw_dir.mkdir(parents=True, exist_ok=True)
     raw_dest = raw_dir / src.name
     if raw_dest.resolve() != src.resolve():
@@ -66,13 +71,11 @@ def convert_document(src: Path, vault_dir: Path, config: dict) -> ConvertResult:
         page_count = get_pdf_page_count(src)
         if page_count >= threshold:
             logger.info("Long PDF detected (%d pages >= %d threshold): %s",
-                         page_count, threshold, src.name)
+                        page_count, threshold, src.name)
             return ConvertResult(raw_path=raw_dest, is_long_doc=True, file_hash=file_hash)
 
     # 4/5. Convert to Markdown
-    sources_dir = vault_dir / "sources"
-    sources_dir.mkdir(parents=True, exist_ok=True)
-    images_dir = vault_dir / "sources" / "images" / src.stem
+    images_dir = vault_layout.images_dir(src.stem)
     images_dir.mkdir(parents=True, exist_ok=True)
 
     doc_name = src.stem
@@ -88,7 +91,8 @@ def convert_document(src: Path, vault_dir: Path, config: dict) -> ConvertResult:
         markdown = result.text_content
         markdown = extract_base64_images(markdown, doc_name, images_dir)
 
-    dest_md = sources_dir / f"{doc_name}.md"
+    dest_md = vault_layout.source_md_path(doc_name)
+    vault_layout.sources.mkdir(parents=True, exist_ok=True)
     dest_md.write_text(markdown, encoding="utf-8")
 
     return ConvertResult(raw_path=raw_dest, source_path=dest_md, file_hash=file_hash)

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from pageindex import IndexConfig, PageIndexClient
 
-from obsidian_wiki.config import load_config
 from obsidian_wiki.tree_renderer import render_summary_md
 
 logger = logging.getLogger(__name__)
@@ -24,10 +23,15 @@ class IndexResult:
     tree: dict
 
 
-def index_long_document(pdf_path: Path, vault_dir: Path) -> IndexResult:
-    """Index a long PDF document using PageIndex and write wiki pages."""
-    state_dir = vault_dir / ".obsidian_wiki"
-    config = load_config(state_dir / "config.yaml")
+def index_long_document(pdf_path: Path, vault_layout, config: dict) -> IndexResult:
+    """Index a long PDF document using PageIndex and write wiki pages.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        vault_layout: VaultLayout instance.
+        config: Full config dict.
+    """
+    state_dir = vault_layout.vault_root / ".obsidian_wiki"
 
     model: str = config.get("model", "gpt-5.4")
     pageindex_api_key = os.environ.get("PAGEINDEX_API_KEY", "")
@@ -72,9 +76,7 @@ def index_long_document(pdf_path: Path, vault_dir: Path) -> IndexResult:
     }
 
     # Write sources/ — per-page content as JSON
-    sources_dir = vault_dir / "sources"
-    sources_dir.mkdir(parents=True, exist_ok=True)
-    images_dir = sources_dir / "images" / pdf_path.stem
+    images_dir = vault_layout.images_dir(pdf_path.stem)
 
     from obsidian_wiki.images import convert_pdf_to_pages
 
@@ -92,14 +94,14 @@ def index_long_document(pdf_path: Path, vault_dir: Path) -> IndexResult:
             logger.warning("Cloud returned no pages for %s; falling back to local pymupdf", pdf_path.name)
         all_pages = convert_pdf_to_pages(pdf_path, pdf_path.stem, images_dir)
 
-    (sources_dir / f"{pdf_path.stem}.json").write_text(
+    vault_layout.sources.mkdir(parents=True, exist_ok=True)
+    (vault_layout.source_json_path(pdf_path.stem)).write_text(
         json_mod.dumps(all_pages, ensure_ascii=False, indent=2), encoding="utf-8",
     )
 
     # Write summaries/ — summary page (no images)
-    summaries_dir = vault_dir / "summaries"
-    summaries_dir.mkdir(parents=True, exist_ok=True)
+    vault_layout.summaries.mkdir(parents=True, exist_ok=True)
     summary_md = render_summary_md(tree, pdf_path.stem, doc_id)
-    (summaries_dir / f"{pdf_path.stem}.md").write_text(summary_md, encoding="utf-8")
+    (vault_layout.summary_path(pdf_path.stem)).write_text(summary_md, encoding="utf-8")
 
     return IndexResult(doc_id=doc_id, description=description, tree=tree)

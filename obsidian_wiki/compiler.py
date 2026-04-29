@@ -46,7 +46,6 @@ index.md lists all documents and concepts with metadata.
 - Do not include YAML frontmatter (---) in generated content; it is managed by code
 """
 
-# Prompt templates (adapted from OpenKB)
 _SYSTEM_TEMPLATE = """\
 You are a wiki compilation agent for an Obsidian knowledge base.
 
@@ -243,9 +242,9 @@ def _parse_json(text: str) -> list | dict:
 # File I/O helpers
 # ---------------------------------------------------------------------------
 
-def _read_concept_briefs(vault_dir: Path) -> str:
+def _read_concept_briefs(layout) -> str:
     """Read existing concept pages and return compact one-line summaries."""
-    concepts_dir = vault_dir / "concepts"
+    concepts_dir = layout.concepts
     if not concepts_dir.exists():
         return "(none yet)"
 
@@ -302,9 +301,8 @@ def _replace_section_entry(lines: list[str], heading: str, link: str, entry: str
     if bounds is None:
         return False
     start, end = bounds
-    entry_prefix = f"- {link}"
     for i in range(start, end):
-        if lines[i].startswith(entry_prefix):
+        if lines[i].startswith(link):
             lines[i] = entry
             return True
     return False
@@ -319,21 +317,20 @@ def _insert_section_entry(lines: list[str], heading: str, entry: str) -> bool:
     return True
 
 
-def _write_summary(vault_dir: Path, doc_name: str, summary: str, doc_type: str = "short") -> None:
+def _write_summary(layout, doc_name: str, summary: str, doc_type: str = "short") -> None:
     """Write summary page."""
     if summary.startswith("---"):
         end = summary.find("---", 3)
         if end != -1:
             summary = summary[end + 3:].lstrip("\n")
-    summaries_dir = vault_dir / "summaries"
-    summaries_dir.mkdir(parents=True, exist_ok=True)
+    layout.summaries.mkdir(parents=True, exist_ok=True)
     ext = "md" if doc_type == "short" else "json"
     fm_lines = [
         f"doc_type: {doc_type}",
         f"full_text: sources/{doc_name}.{ext}",
     ]
     frontmatter = "---\n" + "\n".join(fm_lines) + "\n---\n\n"
-    (summaries_dir / f"{doc_name}.md").write_text(frontmatter + summary, encoding="utf-8")
+    layout.summary_path(doc_name).write_text(frontmatter + summary, encoding="utf-8")
 
 
 _SAFE_NAME_RE = re.compile(r'[^\w\-]')
@@ -345,9 +342,9 @@ def _sanitize_concept_name(name: str) -> str:
     return sanitized or "unnamed-concept"
 
 
-def _write_concept(vault_dir: Path, name: str, content: str, source_file: str, is_update: bool, brief: str = "") -> None:
+def _write_concept(layout, name: str, content: str, source_file: str, is_update: bool, brief: str = "") -> None:
     """Write or update a concept page."""
-    concepts_dir = vault_dir / "concepts"
+    concepts_dir = layout.concepts
     concepts_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _sanitize_concept_name(name)
     path = (concepts_dir / f"{safe_name}.md").resolve()
@@ -406,10 +403,9 @@ def _write_concept(vault_dir: Path, name: str, content: str, source_file: str, i
         path.write_text(frontmatter + content, encoding="utf-8")
 
 
-def _add_related_link(vault_dir: Path, concept_slug: str, doc_name: str, source_file: str) -> None:
+def _add_related_link(layout, concept_slug: str, doc_name: str, source_file: str) -> None:
     """Add a cross-reference link to an existing concept page."""
-    concepts_dir = vault_dir / "concepts"
-    path = concepts_dir / f"{concept_slug}.md"
+    path = layout.concepts / f"{concept_slug}.md"
     if not path.exists():
         return
 
@@ -436,9 +432,9 @@ def _add_related_link(vault_dir: Path, concept_slug: str, doc_name: str, source_
     path.write_text(text, encoding="utf-8")
 
 
-def _backlink_summary(vault_dir: Path, doc_name: str, concept_slugs: list[str]) -> None:
+def _backlink_summary(layout, doc_name: str, concept_slugs: list[str]) -> None:
     """Append missing concept wikilinks to the summary page."""
-    summary_path = vault_dir / "summaries" / f"{doc_name}.md"
+    summary_path = layout.summary_path(doc_name)
     if not summary_path.exists():
         return
 
@@ -455,10 +451,10 @@ def _backlink_summary(vault_dir: Path, doc_name: str, concept_slugs: list[str]) 
     summary_path.write_text(text, encoding="utf-8")
 
 
-def _backlink_concepts(vault_dir: Path, doc_name: str, concept_slugs: list[str]) -> None:
+def _backlink_concepts(layout, doc_name: str, concept_slugs: list[str]) -> None:
     """Append missing summary wikilink to each concept page."""
     link = f"[[summaries/{doc_name}]]"
-    concepts_dir = vault_dir / "concepts"
+    concepts_dir = layout.concepts
 
     for slug in concept_slugs:
         path = concepts_dir / f"{slug}.md"
@@ -474,14 +470,14 @@ def _backlink_concepts(vault_dir: Path, doc_name: str, concept_slugs: list[str])
         path.write_text(text, encoding="utf-8")
 
 
-def _update_index(vault_dir: Path, doc_name: str, concept_names: list[str],
+def _update_index(layout, doc_name: str, concept_names: list[str],
                   doc_brief: str = "", concept_briefs: dict[str, str] | None = None,
                   doc_type: str = "short") -> None:
     """Append document and concept entries to index.md."""
     if concept_briefs is None:
         concept_briefs = {}
 
-    index_path = vault_dir / "index.md"
+    index_path = layout.index
     if not index_path.exists():
         index_path.write_text("# Knowledge Base Index\n\n## Documents\n\n## Concepts\n", encoding="utf-8")
 
@@ -516,7 +512,7 @@ DEFAULT_COMPILE_CONCURRENCY = 5
 
 
 async def _compile_concepts(
-    vault_dir: Path,
+    layout,
     model: str,
     system_msg: dict,
     doc_msg: dict,
@@ -530,7 +526,7 @@ async def _compile_concepts(
     source_file = f"summaries/{doc_name}.md"
 
     # Step 2: Get concepts plan
-    concept_briefs = _read_concept_briefs(vault_dir)
+    concept_briefs = _read_concept_briefs(layout)
 
     plan_raw = _llm_call(model, [
         system_msg,
@@ -545,7 +541,7 @@ async def _compile_concepts(
         parsed = _parse_json(plan_raw)
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning("Failed to parse concepts plan: %s", exc)
-        _update_index(vault_dir, doc_name, [], doc_brief=doc_brief, doc_type=doc_type)
+        _update_index(layout, doc_name, [], doc_brief=doc_brief, doc_type=doc_type)
         return
 
     if isinstance(parsed, list):
@@ -562,7 +558,7 @@ async def _compile_concepts(
     related_items = plan["related"]
 
     if not create_items and not update_items and not related_items:
-        _update_index(vault_dir, doc_name, [], doc_brief=doc_brief, doc_type=doc_type)
+        _update_index(layout, doc_name, [], doc_brief=doc_brief, doc_type=doc_type)
         return
 
     semaphore = asyncio.Semaphore(max_concurrency)
@@ -591,7 +587,7 @@ async def _compile_concepts(
     async def _gen_update(concept: dict) -> tuple[str, str, bool, str]:
         name = concept["name"]
         title = concept.get("title", name)
-        concept_path = vault_dir / "concepts" / f"{_sanitize_concept_name(name)}.md"
+        concept_path = layout.concepts / f"{_sanitize_concept_name(name)}.md"
         if concept_path.exists():
             raw_text = concept_path.read_text(encoding="utf-8")
             if raw_text.startswith("---"):
@@ -638,7 +634,7 @@ async def _compile_concepts(
                 logger.warning("Concept generation failed: %s", r)
                 continue
             name, page_content, is_update, brief = r
-            _write_concept(vault_dir, name, page_content, source_file, is_update, brief=brief)
+            _write_concept(layout, name, page_content, source_file, is_update, brief=brief)
             safe_name = _sanitize_concept_name(name)
             concept_names.append(safe_name)
             if brief:
@@ -647,16 +643,16 @@ async def _compile_concepts(
     # Related (code only, no LLM)
     sanitized_related = [_sanitize_concept_name(s) for s in related_items]
     for slug in sanitized_related:
-        _add_related_link(vault_dir, slug, doc_name, source_file)
+        _add_related_link(layout, slug, doc_name, source_file)
 
     # Backlinks
     all_concept_slugs = concept_names + sanitized_related
     if all_concept_slugs:
-        _backlink_summary(vault_dir, doc_name, all_concept_slugs)
-        _backlink_concepts(vault_dir, doc_name, all_concept_slugs)
+        _backlink_summary(layout, doc_name, all_concept_slugs)
+        _backlink_concepts(layout, doc_name, all_concept_slugs)
 
     # Update index
-    _update_index(vault_dir, doc_name, concept_names,
+    _update_index(layout, doc_name, concept_names,
                   doc_brief=doc_brief, concept_briefs=concept_briefs_map,
                   doc_type=doc_type)
 
@@ -664,7 +660,7 @@ async def _compile_concepts(
 async def compile_short_doc(
     doc_name: str,
     source_path: Path,
-    vault_dir: Path,
+    vault_layout,
     model: str,
     language: str = "en",
     max_concurrency: int = DEFAULT_COMPILE_CONCURRENCY,
@@ -688,11 +684,11 @@ async def compile_short_doc(
     except (json.JSONDecodeError, ValueError):
         doc_brief = ""
         summary = summary_raw
-    _write_summary(vault_dir, doc_name, summary)
+    _write_summary(vault_layout, doc_name, summary)
 
     # Steps 2-4
     await _compile_concepts(
-        vault_dir, model, system_msg, doc_msg,
+        vault_layout, model, system_msg, doc_msg,
         summary, doc_name, max_concurrency, doc_brief=doc_brief,
         doc_type="short",
     )
@@ -702,7 +698,7 @@ async def compile_long_doc(
     doc_name: str,
     summary_path: Path,
     doc_id: str,
-    vault_dir: Path,
+    vault_layout,
     model: str,
     doc_description: str = "",
     language: str = "en",
@@ -723,7 +719,7 @@ async def compile_long_doc(
 
     # Steps 2-4
     await _compile_concepts(
-        vault_dir, model, system_msg, doc_msg,
+        vault_layout, model, system_msg, doc_msg,
         overview, doc_name, max_concurrency, doc_brief=doc_description,
         doc_type="pageindex",
     )
