@@ -535,7 +535,7 @@ async def _compile_concepts(
         {"role": "user", "content": _CONCEPTS_PLAN_USER.format(
             concept_briefs=concept_briefs,
         )},
-    ], "concepts-plan", max_tokens=1024)
+    ], "concepts-plan", max_tokens=2048)
 
     try:
         parsed = _parse_json(plan_raw)

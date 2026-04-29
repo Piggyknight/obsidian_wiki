@@ -74,6 +74,25 @@ sources:
   - ./my_notes
 ```
 
+### Vault-Level LLM Configuration
+
+Instead of (or in addition to) environment variables, you can configure LLM credentials directly in `.obsidian_wiki/config.yaml` under the `llm` key. This takes precedence over all environment variables:
+
+```yaml
+llm:
+  # API key — works with any provider (OpenAI, Anthropic, OpenRouter, etc.)
+  api_key: sk-...
+  # Alternative name for api_key (ANTHROPIC_AUTH_TOKEN style)
+  auth_token: sk-ant-...
+  # Custom base URL — for proxies, OpenRouter, custom endpoints, etc.
+  base_url: https://api.openrouter.ai/v1
+```
+
+**Priority (highest first):**
+1. `llm.api_key` / `llm.auth_token` / `llm.base_url` in `config.yaml`
+2. `.env` file in vault root (`vault/.env`)
+3. Environment variables (`ANTHROPIC_AUTH_TOKEN`, `LLM_API_KEY`, etc.)
+
 ---
 
 ## Supported Models
@@ -136,9 +155,13 @@ Interactive initialization. Sets up `.obsidian_wiki/` and creates layout directo
 
 ```
 Model (enter for default minimax/MiniMax-M2.7): anthropic/claude-sonnet-4-6
+ANTHROPIC_AUTH_TOKEN / API Key (saved to config, enter to skip):
+Custom base URL (e.g. https://api.openrouter.ai/v1, enter to skip):
 Vault root namespace (enter for 'wiki'): wiki
 Raw data source directories (comma-separated): ~/research/papers,./notes
 ```
+
+> **Note:** The API key is saved directly to `.obsidian_wiki/config.yaml` under `llm.auth_token` (or `llm.api_key`), not to a separate `.env` file. This keeps all vault-level configuration in one place.
 
 ### `obsidian-wiki sync`
 
@@ -185,15 +208,22 @@ Source directories configured:
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `OBSIDIAN_WIKI_VAULT` | Vault root path (alternative to `--vault`) |
-| `LLM_API_KEY` | API key for LiteLLM (OpenAI, Anthropic, Gemini, MiniMax, GLM, etc.) |
-| `MINIMAX_API_KEY` | MiniMax API key (auto-set from `LLM_API_KEY` during init) |
-| `ZHIPU_API_KEY` | Zhipu/GLM API key (auto-set from `LLM_API_KEY` during init) |
-| `PAGEINDEX_API_KEY` | Optional: use PageIndex cloud API instead of local |
+|| Variable | Description |
+||----------|-------------|
+|| `OBSIDIAN_WIKI_VAULT` | Vault root path (alternative to `--vault`) |
+|| `LLM_API_KEY` | Universal API key for LiteLLM (fallback for all providers) |
+|| `ANTHROPIC_AUTH_TOKEN` | Anthropic API key (also sets `LLM_API_KEY`) |
+|| `OPENAI_API_KEY` | OpenAI API key |
+|| `ANTHROPIC_API_KEY` | Anthropic API key |
+|| `GEMINI_API_KEY` | Gemini API key |
+|| `MINIMAX_API_KEY` | MiniMax API key |
+|| `ZHIPU_API_KEY` | Zhipu/GLM API key |
+|| `LITELLM_API_BASE` | Custom base URL for LiteLLM (proxies, OpenRouter, etc.) |
+|| `PAGEINDEX_API_KEY` | Optional: use PageIndex cloud API instead of local |
 
-Set `LLM_API_KEY` in your vault's `.env` file or export it in your shell.
+> **Tip:** `ANTHROPIC_AUTH_TOKEN` is automatically treated as a universal key — it sets both `ANTHROPIC_API_KEY` and `LLM_API_KEY`, so any model works without extra configuration.
+
+Vault-level config (`.obsidian_wiki/config.yaml` → `llm`) always takes priority over environment variables.
 
 ---
 
@@ -269,31 +299,23 @@ obsidian-wiki init
 ```
 
 ```
-Model (enter for default minimax/MiniMax-M2.7): minimax/MiniMax-M2.7
+Model (enter for default minimax/MiniMax-M2.7): anthropic/claude-sonnet-4-6
+ANTHROPIC_AUTH_TOKEN / API Key (saved to config, enter to skip): sk-ant-...
+Custom base URL (e.g. https://api.openrouter.ai/v1, enter to skip): https://api.openrouter.ai/v1
 Vault root namespace (enter for 'wiki'): wiki
 Raw data source directories (comma-separated): ~/research/papers,./notes
 ```
 
-This creates `.obsidian_wiki/` and `.env`. The `.env` file looks like:
+This creates `.obsidian_wiki/` with `config.yaml` containing your LLM credentials:
 
-```bash
-# .env — place your API key here
-LLM_API_KEY=your_api_key_here
+```yaml
+# .obsidian_wiki/config.yaml
+llm:
+  auth_token: sk-ant-...
+  base_url: https://api.openrouter.ai/v1
 ```
 
-**2. Add your API key**
-
-Edit `.env` with a real or test key:
-
-```bash
-# Example: MiniMax
-echo "MINIMAX_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx" > .env
-
-# Example: OpenAI (just the key portion, not the full credential)
-echo "OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxx" > .env
-```
-
-**3. Configure source directories**
+**2. Configure source directories**
 
 Edit `.obsidian_wiki/config.yaml`:
 

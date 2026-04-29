@@ -69,30 +69,66 @@ def _find_vault_dir(override: Path | None = None) -> Path | None:
 # LLM setup
 # ---------------------------------------------------------------------------
 
-def _setup_llm_key(vault_dir: Path | None = None) -> None:
-    """Set LiteLLM API key from LLM_API_KEY env var."""
+def _setup_llm(vault_dir: Path | None, config: dict | None = None) -> None:
+    """Configure LiteLLM from vault-level config, .env, and environment variables.
+
+    Priority (highest first):
+      1. Vault-level config llm.api_key / llm.auth_token / llm.base_url
+      2. .env file in vault dir (vault/.env)
+      3. Environment variables (ANTHROPIC_AUTH_TOKEN, LLM_API_KEY, OPENAI_API_KEY, ...)
+      4. LiteLLM defaults
+    """
+    # 1. Load vault .env first (lowest priority)
     if vault_dir is not None:
         env_file = vault_dir / ".env"
         if env_file.exists():
             load_dotenv(env_file, override=False)
 
-    api_key = os.environ.get("LLM_API_KEY", "")
-    if not api_key:
-        has_key = any(os.environ.get(k) for k in (
-            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-            "MINIMAX_API_KEY", "ZHIPU_API_KEY",
-        ))
-        if not has_key:
-            click.echo("Warning: No LLM API key found. Set LLM_API_KEY in your environment or .env file.")
-    else:
-        litellm.api_key = api_key
-        # Map LLM_API_KEY to all supported provider env vars
+    # 2. Vault-level config (highest priority — overrides env vars)
+    llm_cfg = {}
+    if config is not None:
+        llm_cfg = config.get("llm", {})
+
+    # 2a. base_url → LITELLM_API_BASE
+    base_url = llm_cfg.get("base_url", "")
+    if base_url:
+        os.environ["LITELLM_API_BASE"] = base_url
+
+    # 2b. api_key / auth_token (ANTHROPIC_AUTH_TOKEN alias) → LLM_API_KEY
+    api_key = llm_cfg.get("api_key", "") or llm_cfg.get("auth_token", "")
+    if api_key:
+        os.environ["LLM_API_KEY"] = api_key
+
+    # 3. Normalise ANTHROPIC_AUTH_TOKEN → LLM_API_KEY + ANTHROPIC_API_KEY
+    # (treated as a universal key when no provider-specific key is set)
+    anthropic_token = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    if anthropic_token:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_token
+        if not os.environ.get("LLM_API_KEY"):
+            os.environ["LLM_API_KEY"] = anthropic_token
+
+    # 4. Propagate LLM_API_KEY to all known provider keys if no individual key is set
+    master_key = os.environ.get("LLM_API_KEY", "")
+    if master_key:
+        litellm.api_key = master_key
         for env_var in (
             "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
             "MINIMAX_API_KEY", "ZHIPU_API_KEY",
         ):
             if not os.environ.get(env_var):
-                os.environ[env_var] = api_key
+                os.environ[env_var] = master_key
+
+    # 5. Warn if no key found at all
+    has_key = any(os.environ.get(k) for k in (
+        "LLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
+        "MINIMAX_API_KEY", "ZHIPU_API_KEY",
+    ))
+    if not has_key:
+        click.echo(
+            "Warning: No LLM API key found. Set LLM_API_KEY, ANTHROPIC_AUTH_TOKEN, "
+            "or llm.api_key in .obsidian_wiki/config.yaml."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -208,10 +244,15 @@ def init(path):
         default=DEFAULT_CONFIG["model"],
         show_default=False,
     )
-    api_key = click.prompt(
-        "LLM API Key (saved to .env, enter to skip)",
+    auth_token = click.prompt(
+        "ANTHROPIC_AUTH_TOKEN / API Key (saved to config, enter to skip)",
         default="",
         hide_input=True,
+        show_default=False,
+    ).strip()
+    base_url = click.prompt(
+        "Custom base URL (e.g. https://api.openrouter.ai/v1, enter to skip)",
+        default="",
         show_default=False,
     ).strip()
 
@@ -228,6 +269,7 @@ def init(path):
 
     config = {
         **DEFAULT_CONFIG,
+        "model": model,
         "vault": {
             "root": vault_layout_name,
             "sources": "sources",
@@ -238,6 +280,14 @@ def init(path):
         "sources": [s.strip() for s in sources_input.split(",") if s.strip()],
     }
 
+    # Vault-level LLM config (highest priority over env vars)
+    if auth_token or base_url:
+        config["llm"] = {}
+        if auth_token:
+            config["llm"]["auth_token"] = auth_token
+        if base_url:
+            config["llm"]["base_url"] = base_url
+
     state_dir.mkdir(parents=True, exist_ok=True)
     save_config(state_dir / "config.yaml", config)
     (state_dir / "hashes.json").write_text(json.dumps({}, ensure_ascii=False), encoding="utf-8")
@@ -246,14 +296,10 @@ def init(path):
     layout = VaultLayout(target, config)
     layout.ensure_dirs()
 
-    if api_key:
-        env_path = target / ".env"
-        if env_path.exists():
-            click.echo(".env already exists, skipping.")
-        else:
-            env_path.write_text(f"LLM_API_KEY={api_key}", encoding="utf-8")
-            os.chmod(env_path, 0o600)
-            click.echo("Saved LLM API key to .env.")
+    if auth_token:
+        click.echo("Saved LLM auth_token to .obsidian_wiki/config.yaml.")
+    if base_url:
+        click.echo(f"Saved base_url to .obsidian_wiki/config.yaml.")
 
     click.echo(f"\nInitialized in {target}")
     click.echo(f"  Vault namespace: {vault_layout_name}/")
@@ -283,7 +329,7 @@ def sync(ctx, dry_run):
     config = load_config(state_dir / "config.yaml")
     vault_layout = VaultLayout(vault_dir, config)
     registry = HashRegistry(state_dir / "hashes.json")
-    _setup_llm_key(vault_dir)
+    _setup_llm(vault_dir, config)
 
     source_dirs: list[str] = config.get("sources", [])
     if not source_dirs:
@@ -347,7 +393,7 @@ def add(ctx, path):
     config = load_config(state_dir / "config.yaml")
     vault_layout = VaultLayout(vault_dir, config)
     registry = HashRegistry(state_dir / "hashes.json")
-    _setup_llm_key(vault_dir)
+    _setup_llm(vault_dir, config)
 
     target = Path(path)
     if not target.exists():

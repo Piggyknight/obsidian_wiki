@@ -21,6 +21,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Raw data source directories to scan (absolute or relative to cwd)
     # Supports multiple sources; each source is recursively scanned
     "sources": [],
+    # LLM configuration (vault-level, overrides env vars)
+    # - api_key: direct API key (overrides LLM_API_KEY / provider keys)
+    # - base_url: custom endpoint URL (e.g. "https://api.openrouter.ai/v1")
+    # - auth_token: alias for ANTHROPIC_AUTH_TOKEN (treated as api_key)
+    # - model: can be a full model ID including provider prefix, or just name
+    "llm": {},
 }
 
 
