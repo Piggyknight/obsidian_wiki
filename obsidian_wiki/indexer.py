@@ -96,7 +96,7 @@ def index_long_document(pdf_path: Path, vault_layout, config: dict) -> IndexResu
 
     vault_layout.sources.mkdir(parents=True, exist_ok=True)
     (vault_layout.source_json_path(pdf_path.stem)).write_text(
-        json_mod.dumps(all_pages, ensure_ascii=False, indent=2), encoding="utf-8",
+        json_mod.dumps(all_pages, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     # Write summaries/ — summary page (no images)

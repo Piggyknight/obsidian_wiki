@@ -233,7 +233,7 @@ def init(path):
 
     state_dir.mkdir(parents=True, exist_ok=True)
     save_config(state_dir / "config.yaml", config)
-    (state_dir / "hashes.json").write_text(json.dumps({}, encoding="utf-8"))
+    (state_dir / "hashes.json").write_text(json.dumps({}, ensure_ascii=False), encoding="utf-8")
 
     # Create vault layout dirs
     layout = VaultLayout(target, config)
