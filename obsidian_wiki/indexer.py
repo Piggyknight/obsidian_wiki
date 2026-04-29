@@ -33,7 +33,7 @@ def index_long_document(pdf_path: Path, vault_layout, config: dict) -> IndexResu
     """
     state_dir = vault_layout.vault_root / ".obsidian_wiki"
 
-    model: str = config.get("model", "gpt-5.4")
+    model: str = config.get("model", "minimax/MiniMax-M2.7")
     pageindex_api_key = os.environ.get("PAGEINDEX_API_KEY", "")
 
     index_config = IndexConfig(
