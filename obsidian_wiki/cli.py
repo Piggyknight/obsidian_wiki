@@ -251,7 +251,7 @@ def init(path):
         if env_path.exists():
             click.echo(".env already exists, skipping.")
         else:
-            env_path.write_text(f"LLM_API_KEY={api_key}\n", encoding="utf-8")
+            env_path.write_text(f"LLM_API_KEY={api_key}", encoding="utf-8")
             os.chmod(env_path, 0o600)
             click.echo("Saved LLM API key to .env.")
 

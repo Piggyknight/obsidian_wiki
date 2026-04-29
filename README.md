@@ -51,7 +51,7 @@ After `obsidian-wiki init`, edit `.obsidian_wiki/config.yaml`:
 
 ```yaml
 # LLM settings
-model: gpt-5.4-mini
+model: minimax/MiniMax-M2.7
 language: en
 
 # PDF long-doc threshold (pages)
@@ -73,6 +73,22 @@ sources:
   - ~/Downloads/articles
   - ./my_notes
 ```
+
+---
+
+## Supported Models
+
+Uses [LiteLLM](https://docs.litellm.ai/) — any model LiteLLM supports works out of the box. Just set the appropriate API key and use the model identifier as the `model` value in config.
+
+| Provider | Model Identifier | API Key |
+|----------|-----------------|---------|
+| OpenAI | `gpt-4o`, `gpt-4o-mini`, `gpt-5.4-mini` | `OPENAI_API_KEY` |
+| Anthropic | `anthropic/claude-sonnet-4-6`, `anthropic/claude-3-5-sonnet-20241002` | `ANTHROPIC_API_KEY` |
+| Gemini | `gemini/gemini-2.5-pro`, `gemini/gemini-2.0-flash` | `GEMINI_API_KEY` |
+| MiniMax | `minimax/MiniMax-M2.7` | `MINIMAX_API_KEY` |
+| Zhipu/GLM | `zhipu/glm-4-plus`, `zhipu/glm-4v` | `ZHIPU_API_KEY` |
+
+> **Tip:** During `obsidian-wiki init`, if you provide your `LLM_API_KEY`, it will be automatically mapped to all provider key variables so any model can be used without extra configuration.
 
 ### Vault Layout
 
@@ -119,7 +135,7 @@ Commands:
 Interactive initialization. Sets up `.obsidian_wiki/` and creates layout directories.
 
 ```
-Model (enter for default gpt-5.4-mini): anthropic/claude-sonnet-4-6
+Model (enter for default minimax/MiniMax-M2.7): anthropic/claude-sonnet-4-6
 Vault root namespace (enter for 'wiki'): wiki
 Raw data source directories (comma-separated): ~/research/papers,./notes
 ```
@@ -172,7 +188,9 @@ Source directories configured:
 | Variable | Description |
 |----------|-------------|
 | `OBSIDIAN_WIKI_VAULT` | Vault root path (alternative to `--vault`) |
-| `LLM_API_KEY` | API key for LiteLLM (OpenAI, Anthropic, Gemini, etc.) |
+| `LLM_API_KEY` | API key for LiteLLM (OpenAI, Anthropic, Gemini, MiniMax, GLM, etc.) |
+| `MINIMAX_API_KEY` | MiniMax API key (auto-set from `LLM_API_KEY` during init) |
+| `ZHIPU_API_KEY` | Zhipu/GLM API key (auto-set from `LLM_API_KEY` during init) |
 | `PAGEINDEX_API_KEY` | Optional: use PageIndex cloud API instead of local |
 
 Set `LLM_API_KEY` in your vault's `.env` file or export it in your shell.
