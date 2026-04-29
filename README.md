@@ -254,3 +254,116 @@ Requires `PAGEINDEX_API_KEY` for cloud mode. Without it, falls back to local pym
 - Images are extracted to `sources/images/{doc_name}/` and referenced by path
 
 For querying, use the Obsidian search (Ctrl+O) or the `obsidian-wiki query` command which delegates to the Obsidian CLI.
+
+---
+
+## Setup Example
+
+Complete walkthrough — from zero to first sync:
+
+**1. Initialize in your vault**
+
+```bash
+cd ~/Documents/obsidian_vault
+obsidian-wiki init
+```
+
+```
+Model (enter for default minimax/MiniMax-M2.7): minimax/MiniMax-M2.7
+Vault root namespace (enter for 'wiki'): wiki
+Raw data source directories (comma-separated): ~/research/papers,./notes
+```
+
+This creates `.obsidian_wiki/` and `.env`. The `.env` file looks like:
+
+```bash
+# .env — place your API key here
+LLM_API_KEY=your_api_key_here
+```
+
+**2. Add your API key**
+
+Edit `.env` with a real or test key:
+
+```bash
+# Example: MiniMax
+echo "MINIMAX_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx" > .env
+
+# Example: OpenAI (just the key portion, not the full credential)
+echo "OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxx" > .env
+```
+
+**3. Configure source directories**
+
+Edit `.obsidian_wiki/config.yaml`:
+
+```yaml
+model: minimax/MiniMax-M2.7
+language: en
+pageindex_threshold: 20
+
+vault:
+  root: wiki
+  sources: sources
+  summaries: summaries
+  concepts: concepts
+  index: index
+
+sources:
+  - ~/research/papers
+  - ./notes
+```
+
+**4. Sync**
+
+```bash
+obsidian-wiki sync
+```
+
+```
+~/research/papers: 3 supported file(s)
+./notes: 2 supported file(s)
+Total: 5 file(s) to process
+
+Processing: ~/research/papers/attention_is_all_you_need.pdf
+  Adding: attention_is_all_you_need.pdf
+  Long document — indexing with PageIndex...
+  Compiling (doc_id=doc_001)...
+    summary... 1.2s (in=2048, out=128, cached=1024)
+    concepts_plan... 0.8s (in=3000, out=64)
+    create: transformer-architecture, attention-mechanism
+    update: (none)
+    related: deep-learning
+  Compiling short doc...
+. summary... 0.9s (in=1500, out=96)
+    [OK] attention_is_all_you_need.pdf added.
+
+Processing: ~/research/papers/llm_survey.md
+  Adding: llm_survey.md
+  Compiling short doc...
+. summary... 0.7s (in=800, out=80)
+    [OK] llm_survey.md added.
+
+Done: 5 processed, 0 skipped, 5 total
+```
+
+**Resulting vault structure:**
+
+```
+obsidian_vault/
+├── .obsidian_wiki/
+│   ├── config.yaml
+│   └── hashes.json
+├── .env
+└── wiki/
+    ├── index.md
+    ├── sources/
+    │   ├── attention_is_all_you_need.json
+    │   └── llm_survey.md
+    ├── summaries/
+    │   ├── attention_is_all_you_need.md
+    │   └── llm_survey.md
+    └── concepts/
+        ├── transformer-architecture.md
+        └── attention-mechanism.md
+```
