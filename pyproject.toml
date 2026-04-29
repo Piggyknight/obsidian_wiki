@@ -1,0 +1,29 @@
+[project]
+name = "obsidian-wiki"
+version = "0.1.0"
+description = "Build Obsidian knowledge base from documents using LLM, powered by OpenKB workflow"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "python-dotenv>=1.0",
+    "pymupdf>=1.24",
+    "markitdown>=0.0.1",
+    "litellm>=1.0",
+    "json-repair>=0.25",
+    "pageindex>=0.0.1",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+obsidian-wiki = "obsidian_wiki.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
