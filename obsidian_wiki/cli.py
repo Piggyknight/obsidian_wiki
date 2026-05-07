@@ -89,10 +89,23 @@ def _setup_llm(vault_dir: Path | None, config: dict | None = None) -> None:
     if config is not None:
         llm_cfg = config.get("llm", {})
 
-    # 2a. base_url → LITELLM_API_BASE
+    # 2a. base_url → LITELLM_API_BASE + provider-specific env vars
     base_url = llm_cfg.get("base_url", "")
     if base_url:
         os.environ["LITELLM_API_BASE"] = base_url
+        # Also propagate to provider-specific base URL env vars so litellm
+        # provider handlers (which may ignore LITELLM_API_BASE) can pick it up.
+        model_name = (config.get("model", "") if config else "").lower()
+        provider_base_map = {
+            "minimax/": "MINIMAX_API_BASE",
+            "openai/": "OPENAI_API_BASE",
+            "anthropic/": "ANTHROPIC_API_BASE",
+            "gemini/": "GEMINI_API_BASE",
+            "zhipu/": "ZHIPU_API_BASE",
+        }
+        for prefix, env_var in provider_base_map.items():
+            if model_name.startswith(prefix) and not os.environ.get(env_var):
+                os.environ[env_var] = base_url
 
     # 2b. api_key / auth_token (ANTHROPIC_AUTH_TOKEN alias) → LLM_API_KEY
     api_key = llm_cfg.get("api_key", "") or llm_cfg.get("auth_token", "")
